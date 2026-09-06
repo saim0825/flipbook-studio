@@ -824,9 +824,11 @@ function Shell({
   client?: boolean;
   children: any;
 }) {
+  const [clientMode,setClientMode]=useState(client);
+  useEffect(()=>{if(!client)fetch("/api/auth/me").then(async r=>r.ok?await r.json() as {role?:string}:{}).then(d=>d.role==="client"&&setClientMode(true))},[client]);
   return (
     <main className="portalPage">
-      <Side active={active} client={client} />
+      <Side active={active} client={clientMode} />
       <div className="portalMain">
         <Top title={title} />
         <div className="portalContent">{children}</div>
