@@ -2,12 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import {
   Bell,
   BookOpen,
   Check,
   ChevronRight,
   CloudUpload,
+  Code2,
+  Copy,
+  Pencil,
+  Trash2,
   Eye,
   FileText,
   Home,
@@ -32,33 +37,6 @@ type Screen =
   | "settings"
   | "privacy"
   | "terms";
-const books = [
-  {
-    title: "A Brighter Tomorrow",
-    image: "/reference-assets/page-turn-showcase-v2.png",
-    views: "4.2K",
-  },
-  {
-    title: "Summer Catalog 2026",
-    image: "/reference-assets/device-showcase-v2.png",
-    views: "2.9K",
-  },
-  {
-    title: "Miami Property Guide",
-    image: "/reference-assets/page-turn-showcase-v2.png",
-    views: "1.8K",
-  },
-];
-const clients = [
-  {
-    name: "Carlos Azcarate",
-    email: "carlos@azcarate.com",
-    books: 3,
-    status: "Active",
-  },
-  { name: "KIRUM", email: "info@kirum.com", books: 2, status: "Active" },
-  { name: "ASA", email: "contact@asa.com", books: 1, status: "Active" },
-];
 
 function Brand() {
   return (
@@ -168,34 +146,37 @@ function Stat({
     </article>
   );
 }
-function BookCards({ client = false }: { client?: boolean }) {
+type PortalBook={id:string;title:string;pdfUrl:string;views:number;status:string;ownerEmail:string;createdAt:string;background:string;sound:boolean;download:boolean;privacy:string};
+function BookCards({ client = false, onChange }: { client?: boolean;onChange?:()=>void }) {
+  const [books,setBooks]=useState<PortalBook[]>([]),[message,setMessage]=useState("");
+  const load=()=>fetch("/api/books").then(r=>r.ok?r.json():{books:[]}).then(d=>setBooks(d.books||[]));
+  useEffect(()=>{void load()},[]);
+  const copy=async(value:string,label:string)=>{await navigator.clipboard.writeText(value);setMessage(`${label} copied.`);setTimeout(()=>setMessage(""),1800)};
+  const remove=async(id:string)=>{if(!confirm("Delete this flipbook permanently?"))return;const r=await fetch(`/api/books?id=${id}`,{method:"DELETE"});if(!r.ok)return alert("The book could not be deleted.");await load();onChange?.()};
   return (
-    <div className="bookCards">
-      {books.map((book, i) => (
+    <><div className="bookCards realBooks">
+      {books.map((book) => (
         <article key={book.title}>
           <div className="cover">
-            <img src={book.image} alt="" />
             <span>
-              {i === 0 ? "TOMORROW" : i === 1 ? "SUMMER" : "PROPERTY"}
-              <br />
-              GUIDE
+              {book.title}
             </span>
           </div>
           <b>{book.title}</b>
           <small>
-            <i /> {client ? "Full Access" : "Published"} · {book.views} views
+            <i /> {book.status} · {book.views} views
           </small>
-          <div>
-            <a href="/">Open</a>
-            <button
-              onClick={() => navigator.clipboard.writeText(location.origin)}
-            >
-              Share
-            </button>
+          <div className="bookActions">
+            <a href={`/book/${book.id}`} target="_blank"><Eye/>View</a>
+            <button onClick={()=>copy(`${location.origin}/book/${book.id}`,"Share link")}><Copy/>Share</button>
+            <button onClick={()=>copy(`<iframe src="${location.origin}/embed/${book.id}" width="100%" height="700" frameborder="0" allow="fullscreen"></iframe>`,"Embed code")}><Code2/>Embed</button>
+            <a href={`/customize?id=${book.id}`}><Pencil/>Edit</a>
+            <button className="deleteBook" onClick={()=>remove(book.id)}><Trash2/>Delete</button>
           </div>
         </article>
       ))}
-    </div>
+      {!books.length&&<div className="emptyBooks"><BookOpen/><b>No flipbooks yet</b><span>Upload your first PDF to publish it here.</span><a className="blueButton small" href="/upload">Upload PDF</a></div>}
+    </div>{message&&<div className="copyToast">{message}</div>}</>
   );
 }
 
@@ -297,12 +278,13 @@ function Login({ admin = false }: { admin?: boolean }) {
 function Dashboard() {
   const [rows, setRows] = useState<
     Array<{ id: number; name: string; email: string; status: string }>
-  >([]);
+  >([]),[bookRows,setBookRows]=useState<PortalBook[]>([]);
   useEffect(() => {
     fetch("/api/clients")
       .then((r) => (r.ok ? r.json() : { clients: [] }))
       .then((d) => setRows(d.clients || []));
   }, []);
+  useEffect(()=>{fetch("/api/books").then(r=>r.ok?r.json():{books:[]}).then(d=>setBookRows(d.books||[]))},[]);
   return (
     <Shell active="Dashboard" title="Dashboard">
       <section className="welcome">
@@ -310,10 +292,10 @@ function Dashboard() {
         <p>Manage your flipbooks, clients, and engage your audience.</p>
       </section>
       <div className="stats">
-        <Stat icon={BookOpen} label="Total Flipbooks" value="12" />
+        <Stat icon={BookOpen} label="Total Flipbooks" value={String(bookRows.length)} />
         <Stat icon={Users} label="Total Clients" value={String(rows.length)} />
-        <Stat icon={Eye} label="Total Views" value="8.4K" />
-        <Stat icon={FileText} label="Storage Used" value="1.2 GB" />
+        <Stat icon={Eye} label="Total Views" value={String(bookRows.reduce((n,b)=>n+b.views,0))} />
+        <Stat icon={FileText} label="Storage" value="Vercel Blob" />
       </div>
       <Panel title="My Flipbooks" action="View All">
         <BookCards />
@@ -328,22 +310,18 @@ function UploadPage() {
   const input = useRef<HTMLInputElement>(null),
     [file, setFile] = useState<File | null>(null),
     [progress, setProgress] = useState(0),
-    router = useRouter();
-  const choose = (f?: File) => {
+    router = useRouter(),
+    [uploadError,setUploadError]=useState(""),
+    [busy,setBusy]=useState(false);
+  const choose = async (f?: File) => {
     if (!f) return;
     if (!f.name.toLowerCase().endsWith(".pdf"))
       return alert("Please choose a PDF file.");
-    setFile(f);
-    setProgress(12);
-    let p = 12;
-    const timer = setInterval(() => {
-      p += 11;
-      setProgress(Math.min(p, 100));
-      if (p >= 100) {
-        clearInterval(timer);
-        setTimeout(() => router.push("/customize"), 350);
-      }
-    }, 160);
+    if(f.size>100*1024*1024)return alert("This PDF is larger than 100 MB.");
+    setFile(f);setProgress(4);setBusy(true);setUploadError("");
+    const id=crypto.randomUUID(),title=f.name.replace(/\.pdf$/i,"");
+    try{const blob=await upload(`books/${id}/${f.name}`,f,{access:"public",handleUploadUrl:"/api/books/upload",clientPayload:JSON.stringify({id,title}),onUploadProgress:p=>setProgress(Math.round(p.percentage))});const finalized=await fetch("/api/books/finalize",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,title,pdfUrl:blob.url,pathname:blob.pathname})});if(!finalized.ok)throw new Error("The upload completed but the book could not be saved.");setProgress(100);router.push(`/customize?id=${id}`)}
+    catch(e){console.error(e);setUploadError(e instanceof Error?e.message:"Upload failed.");setBusy(false)}
   };
   return (
     <Shell active="Upload PDF" title="Upload PDF">
@@ -376,8 +354,8 @@ function UploadPage() {
           <CloudUpload />
           <h2>Drop your PDF here</h2>
           <p>or click to browse from your device</p>
-          <button className="blueButton" onClick={() => input.current?.click()}>
-            Choose PDF
+          <button className="blueButton" disabled={busy} onClick={() => input.current?.click()}>
+            {busy?"Uploading…":"Choose PDF"}
           </button>
           <input
             ref={input}
@@ -426,15 +404,20 @@ function UploadPage() {
           <span>{progress}%</span>
         </div>
       )}
+      {uploadError&&<p className="formError">{uploadError}</p>}
     </Shell>
   );
 }
 function Customize() {
-  const [title, setTitle] = useState("Summer Catalog 2026"),
+  const [id,setId]=useState(""),
+    [title, setTitle] = useState("Untitled Flipbook"),
     [color, setColor] = useState("#eef8ff"),
     [sound, setSound] = useState(true),
     [download, setDownload] = useState(true),
+    [privacy,setPrivacy]=useState<"public"|"private">("public"),
+    [saving,setSaving]=useState(false),
     router = useRouter();
+  useEffect(()=>{const bookId=new URLSearchParams(location.search).get("id")||"";setId(bookId);if(bookId)fetch("/api/books").then(r=>r.json()).then(d=>{const b=(d.books||[]).find((x:PortalBook)=>x.id===bookId);if(b){setTitle(b.title);setColor(b.background);setSound(b.sound);setDownload(b.download);setPrivacy(b.privacy as "public"|"private")}})},[]);
   return (
     <Shell active="My Flipbooks" title="Customize Flipbook">
       <div className="steps wide">
@@ -498,9 +481,9 @@ function Customize() {
           <Switch label="Allow Download" value={download} set={setDownload} />
           <label>
             Privacy
-            <select>
-              <option>Public</option>
-              <option>Private</option>
+            <select value={privacy} onChange={e=>setPrivacy(e.target.value as "public"|"private")}>
+              <option value="public">Public</option>
+              <option value="private">Private</option>
             </select>
           </label>
           <div className="success">
@@ -509,13 +492,10 @@ function Customize() {
           </div>
           <button
             className="blueButton"
-            onClick={() => {
-              localStorage.setItem("flipbook-title", title);
-              alert("Flipbook published successfully.");
-              router.push("/admin");
-            }}
+            disabled={saving||!id}
+            onClick={async()=>{setSaving(true);const response=await fetch("/api/books",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id,title,background:color,sound,download,privacy,status:"published"})});setSaving(false);if(!response.ok)return alert("The flipbook could not be published.");alert("Flipbook published successfully.");const me=await fetch("/api/auth/me").then(r=>r.json());router.push(me.role==="client"?"/client":"/admin")}}
           >
-            Publish Flipbook
+            {saving?"Publishing…":"Publish Flipbook"}
           </button>
         </aside>
       </div>
@@ -648,26 +628,25 @@ function Clients() {
   );
 }
 function ClientDashboard() {
-  const [email, setEmail] = useState("Client");
+  const [email, setEmail] = useState("Client"),[bookRows,setBookRows]=useState<PortalBook[]>([]);
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => d.email && setEmail(d.email));
   }, []);
+  useEffect(()=>{fetch("/api/books").then(r=>r.ok?r.json():{books:[]}).then(d=>setBookRows(d.books||[]))},[]);
   return (
     <Shell active="Dashboard" title={`Welcome, ${email}`} client>
       <div className="stats two">
-        <Stat icon={BookOpen} label="Assigned Flipbooks" value="3" />
-        <Stat icon={Eye} label="Total Views" value="4.8K" />
+        <Stat icon={BookOpen} label="Your Flipbooks" value={String(bookRows.length)} />
+        <Stat icon={Eye} label="Total Views" value={String(bookRows.reduce((n,b)=>n+b.views,0))} />
       </div>
       <Panel title="Your Flipbooks">
         <BookCards client />
       </Panel>
       <div className="helpBox">
         Need another flipbook?{" "}
-        <a href="mailto:grapicdesigner9@gmail.com">
-          Contact your administrator.
-        </a>
+        <span> Contact your administrator.</span>
       </div>
     </Shell>
   );
@@ -702,7 +681,7 @@ function SettingsPage() {
         </label>
         <label>
           Website URL
-          <input defaultValue="https://flipbook.example.com" />
+          <input defaultValue="https://flipbook-studio-blond.vercel.app" readOnly />
         </label>
         <div className="fieldRow">
           <label>
@@ -880,7 +859,7 @@ function Panel({
   );
 }
 function ClientTable({
-  rows = clients,
+  rows = [],
   onRemove,
 }: {
   rows?: Array<{
