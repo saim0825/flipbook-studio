@@ -1,16 +1,15 @@
-import {env} from "cloudflare:workers";
-import {getDb} from "../../../../db";
-import {clients} from "../../../../db/schema";
-import {eq} from "drizzle-orm";
 import {createSession,verifyPassword} from "../../../auth";
+import {findClientByEmail} from "../../../../lib/client-store";
 
 export async function POST(request:Request){
   const {email,password}=await request.json() as {email?:string;password?:string};
   if(!email||!password)return Response.json({error:"Enter your email and password."},{status:400});
   let role:"admin"|"client"|null=null;
-  if(email.toLowerCase()===env.ADMIN_EMAIL.toLowerCase()&&await verifyPassword(password,env.ADMIN_PASSWORD_HASH))role="admin";
+  const adminEmail=process.env.ADMIN_EMAIL;
+  const adminPasswordHash=process.env.ADMIN_PASSWORD_HASH;
+  if(adminEmail&&adminPasswordHash&&email.toLowerCase()===adminEmail.toLowerCase()&&await verifyPassword(password,adminPasswordHash))role="admin";
   else{
-    const row=await getDb().select().from(clients).where(eq(clients.email,email.toLowerCase())).get();
+    const row=await findClientByEmail(email);
     if(row&&row.status==="active"&&await verifyPassword(password,row.passwordHash))role="client";
   }
   if(!role)return Response.json({error:"Incorrect email or password."},{status:401});

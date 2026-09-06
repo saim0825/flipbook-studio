@@ -1,6 +1,5 @@
 import {cookies} from "next/headers";
 import {redirect} from "next/navigation";
-import {env} from "cloudflare:workers";
 
 export type Session={email:string;role:"admin"|"client"};
 const encoder=new TextEncoder();
@@ -8,7 +7,9 @@ const bytes=(value:string)=>{const padded=value+"=".repeat((4-value.length%4)%4)
 const b64=(value:Uint8Array)=>btoa(String.fromCharCode(...value)).replaceAll("+","-").replaceAll("/","_").replaceAll("=","");
 
 async function signature(payload:string){
-  const key=await crypto.subtle.importKey("raw",encoder.encode(env.SESSION_SECRET),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const secret=process.env.SESSION_SECRET;
+  if(!secret)throw new Error("SESSION_SECRET is not configured.");
+  const key=await crypto.subtle.importKey("raw",encoder.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
   return b64(new Uint8Array(await crypto.subtle.sign("HMAC",key,encoder.encode(payload))));
 }
 export async function createSession(value:Session){
