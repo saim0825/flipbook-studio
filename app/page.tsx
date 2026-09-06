@@ -29,7 +29,7 @@ export default function Home() {
   const input = useRef<HTMLInputElement>(null),
     viewer = useRef<HTMLDivElement>(null),
     flip = useRef<any>(null),
-    audio = useRef<AudioContext | null>(null),
+    audio = useRef<HTMLAudioElement | null>(null),
     soundRef = useRef(true);
   const [status, setStatus] = useState<Status>("idle"),
     [error, setError] = useState(""),
@@ -48,40 +48,11 @@ export default function Home() {
   const playFlipSound = useCallback(() => {
     if (!soundRef.current) return;
     try {
-      const ctx = audio.current || new AudioContext();
-      audio.current = ctx;
-      if (ctx.state === "suspended") void ctx.resume();
-      const duration = 0.42,
-        buffer = ctx.createBuffer(
-          1,
-          Math.floor(ctx.sampleRate * duration),
-          ctx.sampleRate,
-        ),
-        data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) {
-        const t = i / data.length;
-        data[i] =
-          (Math.random() * 2 - 1) * Math.sin(Math.PI * t) * (0.72 - 0.5 * t);
-      }
-      const source = ctx.createBufferSource(),
-        filter = ctx.createBiquadFilter(),
-        gain = ctx.createGain();
-      filter.type = "bandpass";
-      filter.frequency.setValueAtTime(1450, ctx.currentTime);
-      filter.frequency.exponentialRampToValueAtTime(
-        430,
-        ctx.currentTime + duration,
-      );
-      filter.Q.value = 0.55;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.19, ctx.currentTime + 0.035);
-      gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        ctx.currentTime + duration,
-      );
-      source.buffer = buffer;
-      source.connect(filter).connect(gain).connect(ctx.destination);
-      source.start();
+      const player = audio.current || new Audio("/page-turn.wav");
+      audio.current = player;
+      player.volume = 0.8;
+      player.currentTime = 0;
+      void player.play();
     } catch {}
   }, []);
   const reset = useCallback(() => {
@@ -170,19 +141,20 @@ export default function Home() {
         }
         const { PageFlip } = await import("page-flip"),
           c = pages[0].querySelector("canvas")!,
-          h = Math.min(680, Math.max(430, innerHeight - 210));
+          mobile = matchMedia("(max-width: 700px)").matches,
+          h = Math.min(mobile ? innerHeight - 105 : innerHeight - 125, mobile ? 900 : 1000);
         const instance = new PageFlip(viewer.current, {
           width: Math.round((h * c.width) / c.height),
           height: h,
           size: "stretch",
           minWidth: 260,
-          maxWidth: 650,
+          maxWidth: 820,
           minHeight: 360,
-          maxHeight: 850,
+          maxHeight: 1100,
           showCover: true,
           mobileScrollSupport: false,
-          drawShadow: true,
-          maxShadowOpacity: 0.78,
+          drawShadow: !mobile,
+          maxShadowOpacity: mobile ? 0 : 0.78,
           usePortrait: true,
           flippingTime: 1150,
           swipeDistance: 18,
@@ -231,39 +203,7 @@ export default function Home() {
   };
   if (status !== "idle")
     return (
-      <main className="reader">
-        <header className="viewerTop">
-          <a
-            className="brand"
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              reset();
-            }}
-          >
-            <BookOpen />
-            <b>FlipBook</b>
-          </a>
-          <button className="backHome" onClick={reset}>
-            <HomeIcon />
-            Back to Home
-          </button>
-          <b className="viewerTitle">{name || "Creating your flipbook"}</b>
-          <button
-            className="shareBtn"
-            onClick={() =>
-              navigator.share
-                ? navigator.share({ title: name, url: location.href })
-                : navigator.clipboard.writeText(location.href)
-            }
-          >
-            <Share2 />
-            Share
-          </button>
-          <button className="moreBtn" aria-label="More options">
-            <MoreVertical />
-          </button>
-        </header>
+      <main className="reader guestReader">
         {status === "ready" && (
           <div className="viewerTools">
             <button
