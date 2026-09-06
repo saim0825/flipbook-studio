@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
+import { uploadPresigned } from "@vercel/blob/client";
 import {
   Bell,
   BookOpen,
@@ -320,7 +320,7 @@ function UploadPage() {
     if(f.size>100*1024*1024)return alert("This PDF is larger than 100 MB.");
     setFile(f);setProgress(4);setBusy(true);setUploadError("");
     const id=crypto.randomUUID(),title=f.name.replace(/\.pdf$/i,"");
-    try{const blob=await upload(`books/${id}/${f.name}`,f,{access:"public",handleUploadUrl:"/api/books/upload",clientPayload:JSON.stringify({id,title}),onUploadProgress:p=>setProgress(Math.round(p.percentage))});const finalized=await fetch("/api/books/finalize",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,title,pdfUrl:blob.url,pathname:blob.pathname})});if(!finalized.ok)throw new Error("The upload completed but the book could not be saved.");setProgress(100);router.push(`/customize?id=${id}`)}
+    try{const blob=await uploadPresigned(`books/${id}/${f.name}`,f,{access:"public",handleUploadUrl:"/api/books/upload",clientPayload:JSON.stringify({id,title}),onUploadProgress:p=>setProgress(Math.round(p.percentage))});const finalized=await fetch("/api/books/finalize",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,title,pdfUrl:blob.url,pathname:blob.pathname})});if(!finalized.ok)throw new Error("The upload completed but the book could not be saved.");setProgress(100);router.push(`/customize?id=${id}`)}
     catch(e){console.error(e);setUploadError(e instanceof Error?e.message:"Upload failed.");setBusy(false)}
   };
   return (
