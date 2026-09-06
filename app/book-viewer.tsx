@@ -6,7 +6,7 @@ type Book={id:string;title:string;pdfUrl:string;background:string;sound:boolean;
 export default function BookViewer({book,embedded=false}:{book:Book;embedded?:boolean}){
   const host=useRef<HTMLDivElement>(null),flip=useRef<any>(null),audio=useRef<HTMLAudioElement|null>(null),soundRef=useRef(book.sound);
   const [loading,setLoading]=useState(true),[error,setError]=useState(""),[page,setPage]=useState(1),[count,setCount]=useState(0),[thumbs,setThumbs]=useState<string[]>([]),[texts,setTexts]=useState<string[]>([]),[showThumbs,setShowThumbs]=useState(false),[zoom,setZoom]=useState(1),[sound,setSound]=useState(book.sound);
-  const turnSound=useCallback(()=>{if(!soundRef.current)return;try{const player=audio.current||new Audio("/page-turn.wav");audio.current=player;player.volume=.8;player.currentTime=0;void player.play()}catch{}},[]);
+  const turnSound=useCallback(()=>{if(!soundRef.current)return;try{const player=audio.current||new Audio("/page-turn.mp3");audio.current=player;player.volume=.8;player.currentTime=0;void player.play()}catch{}},[]);
   useEffect(()=>{let cancelled=false;async function load(){try{
     const response=await fetch(book.pdfUrl);if(!response.ok)throw new Error("PDF could not be downloaded.");
     const pdfjs=await import("pdfjs-dist");pdfjs.GlobalWorkerOptions.workerSrc=new URL("pdfjs-dist/build/pdf.worker.min.mjs",import.meta.url).toString();

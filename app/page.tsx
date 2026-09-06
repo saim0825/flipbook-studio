@@ -48,7 +48,7 @@ export default function Home() {
   const playFlipSound = useCallback(() => {
     if (!soundRef.current) return;
     try {
-      const player = audio.current || new Audio("/page-turn.wav");
+      const player = audio.current || new Audio("/page-turn.mp3");
       audio.current = player;
       player.volume = 0.8;
       player.currentTime = 0;
