@@ -1,0 +1,1 @@
+import PortalScreen from "../portal-screen";import {requireRole} from "../auth";export const dynamic="force-dynamic";export default async function Page(){await requireRole("admin");return <PortalScreen screen="settings"/>}
